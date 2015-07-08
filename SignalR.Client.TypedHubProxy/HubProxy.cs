@@ -216,7 +216,7 @@
 
             if (!(instance is TClientInterface))
             {
-                throw new System.Data.ConstraintException(string.Format("{0} doesn't implements the interface {1}.",
+                throw new ConstraintException(string.Format("{0} doesn't implements the interface {1}.",
                     instance.GetType().Name, typeof(TClientInterface).Name));
             }
 
@@ -224,41 +224,56 @@
 
             foreach (System.Reflection.MethodInfo methodInfo in methodInfos)
             {
-                System.Reflection.ParameterInfo[] parameterInfos = methodInfo.GetParameters();
-
-                if (parameterInfos.Count() > 7)
+                try
                 {
-                    throw new NotSupportedException(
-                        string.Format(
-                            "Only interface methods with less or equal 7 parameters are supported: {0}.{1}({2})!",
-                        // ReSharper disable once PossibleNullReferenceException
-                            methodInfo.DeclaringType.FullName.Replace("+", "."),
-                            methodInfo.Name,
-                            string.Join(", ",
-                                methodInfo.GetParameters()
-                                    .Select(p => string.Format("{0} {1}", p.ParameterType.Name, p.Name)))));
+                    System.Reflection.ParameterInfo[] parameterInfos = methodInfo.GetParameters();
+
+                    if (parameterInfos.Count() > 7)
+                    {
+                        throw new NotSupportedException(
+                            string.Format(
+                                "Only interface methods with less or equal 7 parameters are supported: {0}.{1}({2})!",
+                            // ReSharper disable once PossibleNullReferenceException
+                                methodInfo.DeclaringType.FullName.Replace("+", "."),
+                                methodInfo.Name,
+                                string.Join(", ",
+                                    methodInfo.GetParameters()
+                                        .Select(p => string.Format("{0} {1}", p.ParameterType.Name, p.Name)))));
+                    }
+
+                    Type actionType=null;
+
+                    if (parameterInfos.Any())
+                    {
+                        var types = parameterInfos.Select(p => p.ParameterType).ToArray();
+                        switch (parameterInfos.Length){
+                            case 1: actionType =typeof(Action<>).MakeGenericType(types);break;
+                            case 2: actionType =typeof(Action<,>).MakeGenericType(types);break;
+                            case 3: actionType =typeof(Action<,,>).MakeGenericType(types);break;
+                            case 4: actionType =typeof(Action<,,,>).MakeGenericType(types);break;
+                            case 5: actionType =typeof(Action<,,,,>).MakeGenericType(types);break;
+                            case 6: actionType =typeof(Action<,,,,,>).MakeGenericType(types);break;
+                            case 7: actionType =typeof(Action<,,,,,,>).MakeGenericType(types);break;
+                            case 8: actionType =typeof(Action<,,,,,,,>).MakeGenericType(types);break;
+                            case 9: actionType =typeof(Action<,,,,,,,,>).MakeGenericType(types);break;
+                            default:
+                                throw new Exception("To much parameters, maximum 9.");
+                        }
+                    }
+                    else
+                    {
+                        actionType = typeof(Action);
+                    }
+
+                    Delegate actionDelegate = Delegate.CreateDelegate(actionType, instance, methodInfo);
+                    CreateSubscription(methodInfo.Name, actionDelegate);
                 }
-
-                Type actionType;
-
-                if (parameterInfos.Any())
+                catch (Exception ex)
                 {
-                    actionType = parameterInfos.Length > 1
-                        ? typeof(Action<,>).MakeGenericType(parameterInfos.Select(p => p.ParameterType).ToArray())
-                        : typeof(Action<>).MakeGenericType(parameterInfos.Select(p => p.ParameterType).ToArray());
+                    throw new Exception("Could not create method:"+methodInfo+":"+ex.Message);
                 }
-                else
-                {
-                    actionType = typeof(Action);
-                }
-
-                Delegate actionDelegate = Delegate.CreateDelegate(actionType, instance, methodInfo);
-
-
-                CreateSubscription(methodInfo.Name, actionDelegate);
             }
         }
-
         #endregion
 
         #region IObservableHubProxy implementations
